@@ -9,3 +9,8 @@ venv/
 
 # generated output
 out/
+
+# UI build artifacts
+ui/node_modules/
+ui/dist/
+ui/.vite/
