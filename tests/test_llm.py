@@ -8,9 +8,8 @@ from plato.llm.adaption_client import AdaptionClient
 from plato.llm.fallback import rule_based_incident
 from plato.llm.incident_schema import TOOL_NAME, validate_incident
 
-GOOD = {"issue_type": "water_leak", "likely_cause": "equipment_fault", "action": "request_human_approval",
-        "priority": "high", "confidence": 0.8, "reason": "Steady flow in a vacant room.",
-        "evidence_used": ["flow_z"]}
+GOOD = {"issue_type": "water_leak", "likely_cause": "equipment_fault", "severity": "high",
+        "confidence": 0.8, "reason": "Steady flow in a vacant room.", "evidence_used": ["flow_z"]}
 PACKET = {"detector": "water_baseline", "asset": "R104",
           "features": {"occupied_share": 0.0, "flow_z": 9.0, "flow_cv": 0.1, "duration_h": 8}, "quality_flags": []}
 
@@ -48,10 +47,10 @@ class TestValidation(unittest.TestCase):
         self.assertEqual(validate_incident(GOOD), [])
 
     def test_bad_enum_missing_and_extra(self):
-        bad = dict(GOOD, priority="urgent", extra=1)
+        bad = dict(GOOD, severity="urgent", extra=1)
         del bad["reason"]
         errs = " ".join(validate_incident(bad))
-        self.assertIn("priority", errs)
+        self.assertIn("severity", errs)
         self.assertIn("missing field 'reason'", errs)
         self.assertIn("unexpected field 'extra'", errs)
 
@@ -62,6 +61,11 @@ class TestValidation(unittest.TestCase):
     def test_not_an_object(self):
         self.assertTrue(validate_incident([GOOD]))
 
+    def test_understand_must_not_choose_actions(self):
+        # stage separation: action / priority / approval flags are DECIDE's job, so they are rejected here
+        for k, v in (("action", "dispatch_technician"), ("priority", "high"), ("requires_human_approval", True)):
+            self.assertIn(f"unexpected field '{k}'", " ".join(validate_incident(dict(GOOD, **{k: v}))))
+
 
 class TestClientFlow(unittest.TestCase):
     def test_valid_first_try(self):
@@ -71,11 +75,11 @@ class TestClientFlow(unittest.TestCase):
         self.assertEqual(fake.calls[0]["tool_choice"], {"type": "function", "name": TOOL_NAME})
 
     def test_invalid_then_valid_retry_quotes_errors(self):
-        c, fake = make_client([resp(fc(dict(GOOD, priority="urgent"))), resp(fc(GOOD))])
+        c, fake = make_client([resp(fc(dict(GOOD, severity="urgent"))), resp(fc(GOOD))])
         r = c.report_incident(PACKET)
         self.assertEqual((r.source, len(r.attempts)), ("llm_retry", 2))
         self.assertFalse(r.attempts[0].ok)
-        self.assertIn("priority", fake.calls[1]["input"][-1]["content"])
+        self.assertIn("severity", fake.calls[1]["input"][-1]["content"])
 
     def test_invalid_twice_falls_back_only_one_retry(self):
         c, fake = make_client([resp(fc("{not json")), resp(fc({}))])
@@ -137,10 +141,10 @@ class TestFallbackRules(unittest.TestCase):
                                    "features": {"flow_z": 99, "occupied_share": 0.0}})
         self.assertEqual(out["issue_type"], "data_quality")
 
-    def test_dirty_room_is_never_released(self):
-        out = rule_based_incident({"detector": "room_turnaround", "asset": "R3",
-                                   "features": {"housekeeping_state": "dirty"}})
-        self.assertNotEqual(out["action"], "release_room")
+    def test_fallback_never_picks_an_action(self):
+        out = rule_based_incident(PACKET)
+        self.assertNotIn("action", out)
+        self.assertNotIn("priority", out)
 
 
 if __name__ == "__main__":
