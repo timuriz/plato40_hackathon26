@@ -25,10 +25,15 @@ GAP_TOLERANCE = {
     "comfort": pd.Timedelta("3h"),
     "room_turnaround": pd.Timedelta("6h"),
     "sensor_quality": pd.Timedelta("15min"),
+    "ventilation_maintenance": pd.Timedelta("12h"),  # re-emitted every 6 h while the filter stays loaded
+    "ventilation_sensor_gap": pd.Timedelta("14h"),   # re-emitted every 12 h while the dp sensor is blank
+    "logistics": pd.Timedelta("14h"),                # hourly projection re-emitted every 12 h
+    "energy_optimization": pd.Timedelta("12h"),  # at most one proposal per local day -> one episode per day
+    "occupancy_surge": pd.Timedelta("12h"),      # raised once per affected day (<=1 revision), days are >12 h apart
 }
 DEFAULT_GAP = pd.Timedelta("1h")
 MAX_FOLLOWUPS = 2
-PERSIST_ESCALATION_H = {"water_baseline": 12.0, "comfort": 6.0}  # emit a follow-up when duration crosses this
+PERSIST_ESCALATION_H = {"water_baseline": 12.0, "comfort": 6.0, "ventilation_maintenance": 24.0}  # emit a follow-up when duration crosses this
 
 
 @dataclass

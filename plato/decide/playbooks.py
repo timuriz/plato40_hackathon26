@@ -64,15 +64,70 @@ def propose(u: Dict[str, Any], packet: Dict[str, Any]) -> List[Proposal]:
         return [Proposal("schedule_cleaning", pri, "room is not clean and cannot be released")]
 
     if it == "ventilation_maintenance":
-        return [Proposal("dispatch_technician", sev, "ventilation maintenance needed")] if conf >= CONF_PROPOSE \
-            else [Proposal("flag_anomaly", "medium", "evidence is weak; record and keep watching")]
+        if conf < CONF_PROPOSE:
+            return [Proposal("flag_anomaly", "medium", "evidence is weak; record and keep watching")]
+        if f.get("open_work_order"):
+            return [Proposal("defer_action", sev, f"work order {f['open_work_order']} already covers AHU1; "
+                                                  "keep monitoring the filter signal")]
+        if f.get("contractor_needed"):
+            why = "no in-house technician slot soon; request an external HVAC contractor (needs approval)"
+        elif f.get("technician_next_slot_utc"):
+            why = f"service AHU1 filters in the next real technician slot ({f['technician_next_slot_utc']})"
+        else:
+            why = "ventilation maintenance needed"
+        return [Proposal("dispatch_technician", sev, why, params={
+            "slot_utc": f.get("technician_next_slot_utc"), "contractor": bool(f.get("contractor_needed"))})]
 
     if it == "logistics":
-        return [Proposal("order_service", sev, "logistics limit is at risk")] if conf >= CONF_PROPOSE \
-            else [Proposal("flag_anomaly", "low", "evidence is weak; record and keep watching")]
+        if conf < CONF_PROPOSE:
+            return [Proposal("flag_anomaly", "low", "evidence is weak; record and keep watching")]
+        if f.get("subject") == "floor_bin":
+            if f.get("robot_can_carry"):
+                return [Proposal("dispatch_robot", sev, "robot carries the full floor bin to the central container")]
+            return [Proposal("schedule_cleaning", sev, "housekeeping empties the floor bin early")]
+        if f.get("extra_service_helps") is False:
+            return [Proposal("request_human_approval", sev, "an extra service cannot arrive before the regular "
+                                                            "one; a person must arrange relief")]
+        return [Proposal("order_service", sev, "order an extra service now (about 24 h lead time)")]
 
     if it == "energy_optimization":
-        return [Proposal("optimize_energy", "low", "shift load without touching comfort")]
+        # autonomous, low priority; the guard converts it to defer_action when features.comfort_at_risk
+        shift = [k for k in ("battery_plan", "preheat_plan") if f.get(k)]
+        return [Proposal("optimize_energy", "low",
+                         "shift load to cheap hours (" + (", ".join(shift) or "tariff spread") + ") without touching comfort",
+                         params={"shift": shift})]
 
-    # data_quality, occupancy_surge and anything else: record it, do not act physically
+    if it == "occupancy_surge":
+        if conf < CONF_PROPOSE:
+            return [Proposal("flag_anomaly", "medium", "evidence is weak; record and keep watching")]
+        gap = int(f.get("gap_rooms") or 0)
+        out = [Proposal("schedule_cleaning", sev,
+                        "surge day: order the turnovers (same-day arrivals first) onto the cleaners known to be on shift",
+                        params={"scope": "same_day_turnovers_first", "gap_rooms": gap})]
+        if int(f.get("robots_in_service") or 0) > 0 and int(f.get("robot_floor_jobs") or 0) > 0:
+            out.append(Proposal("dispatch_robot", "medium",
+                                "robots on shift take the floor passes only; bathrooms stay with staff",
+                                params={"scope": "floor_only", "jobs": int(f["robot_floor_jobs"])}))
+        if gap > 0 and not f.get("contingent"):
+            if int(f.get("arrivals_at_risk") or 0) > 0:
+                out.append(Proposal("notify_guest", sev,
+                                    "tell the arrivals at risk a realistic ready time instead of a promised 15:00",
+                                    params={"arrivals_at_risk": int(f["arrivals_at_risk"]),
+                                            "ready_window_local": f.get("oncall_ready_window_local")}))
+            if f.get("oncall_needed"):
+                out.append(Proposal("request_human_approval", sev,
+                                    "the staffed capacity is short by "
+                                    f"{gap} room(s); the costly on-call housekeeper (waiting guests only, one room at a "
+                                    "time) needs a human decision",
+                                    params={"resource": "ONCALL_1", "rooms": int(f.get("oncall_would_cover_rooms") or 0),
+                                            "residual_gap_rooms": int(f.get("residual_gap_after_oncall") or 0)}))
+        return out
+
+    if it == "data_quality" and packet.get("detector") == "ventilation_sensor_gap":
+        long_gap = float(f.get("gap_hours_so_far") or 0) >= 24
+        return [Proposal("flag_anomaly", "medium" if long_gap else "low",
+                         "AHU1 filter_dp_pa is blank: record the gap and restore the sensor feed; "
+                         "a gap is not evidence of filter degradation")]
+
+    # data_quality and anything else: record it, do not act physically
     return [Proposal("flag_anomaly", sev if it != "data_quality" else "low", "record for review")]
