@@ -40,7 +40,10 @@ def read_log(path):
         if not isinstance(row, dict):
             raise ValueError(f'{path}:{number}: expected an object')
         try:
-            stamp = pd.to_datetime(row.get('timestamp_utc'), utc=True)
+            raw_stamp = row.get('timestamp_utc')
+            stamp = pd.Timestamp(raw_stamp) if raw_stamp else pd.NaT
+            if not pd.isna(stamp):
+                stamp = stamp.tz_localize('UTC') if stamp.tzinfo is None else stamp.tz_convert('UTC')
         except (TypeError, ValueError):
             continue
         if stamp is None or pd.isna(stamp):
@@ -54,6 +57,11 @@ def causal_log(path, timestamp):
     for original in read_log(path):
         if pd.Timestamp(original['timestamp_utc']) > timestamp:
             continue
+        availability = original.get('available_at') or original.get('available_at_utc') or original.get('published_utc')
+        if availability:
+            known_at = pd.to_datetime(availability, utc=True, errors='coerce')
+            if pd.isna(known_at) or known_at > timestamp:
+                continue
         row = dict(original)
         # Also honor explicit state-change timestamps in enriched decision records.
         for prefix in ('approval', 'consent', 'execution', 'verification'):
@@ -72,7 +80,15 @@ def snapshot(rows, id_fields):
     for index, row in enumerate(rows):
         key = next((row.get(k) for k in id_fields if row.get(k)), f'row-{index}')
         first = result.get(key, {}).get('first_seen_utc', row['timestamp_utc'])
-        result[key] = {**row, 'first_seen_utc': first}
+        available = row.get('available_at') or row.get('available_at_utc') or row.get('published_utc')
+        known = pd.Timestamp(row['timestamp_utc'])
+        if available:
+            parsed = pd.to_datetime(available, utc=True, errors='coerce')
+            if not pd.isna(parsed):
+                known = max(known, parsed)
+        previous = result.get(key, {}).get('first_available_utc')
+        first_available = min(known, pd.Timestamp(previous)) if previous else known
+        result[key] = {**row, 'first_seen_utc': first, 'first_available_utc': value(first_available)}
     return list(result.values())
 
 
@@ -116,7 +132,14 @@ def next_incident_time(obs, path, timestamp, direction):
         if row.get('issue_type') == 'no_incident':
             continue
         identity = row.get('episode_id') or row.get('incident_id') or row.get('event_id') or f'row-{index}'
-        firsts.setdefault(identity, pd.Timestamp(row['timestamp_utc']))
+        occurred = pd.Timestamp(row['timestamp_utc'])
+        availability = row.get('available_at') or row.get('available_at_utc') or row.get('published_utc')
+        if availability:
+            known_at = pd.to_datetime(availability, utc=True, errors='coerce')
+            if pd.isna(known_at):
+                continue
+            occurred = max(occurred, known_at)
+        firsts[identity] = min(firsts.get(identity, occurred), occurred)
     # Move to the first step where a detection is actually available (never round it back).
     candidates = set()
     for stamp in firsts.values():
@@ -132,6 +155,9 @@ def operational_context(obs, view, timestamp):
     def current(name):
         frame = view.series(name)
         return value(frame.iloc[-1].to_dict()) if len(frame) else {}
+    def last_timestamp(name):
+        frame = view.series(name)
+        return value(frame.index[-1]) if len(frame) else None
     events = view.events()
     recent = events[events.timestamp_utc >= timestamp-pd.Timedelta('48h')]
     requests = view.guest_requests()
@@ -146,7 +172,10 @@ def operational_context(obs, view, timestamp):
         'weather': current('weather'), 'weather_quality': {k: Q_NAMES.get(v,'missing') for k,v in current('weather_q').items()},
         'forecast': records(view.forecast().head(24)), 'tariff': records(tariff),
         'equipment': current('equipment'), 'equipment_quality': {k: Q_NAMES.get(v,'missing') for k,v in current('equipment_q').items()},
-        'equipment_status': current('equipment_status'), 'water_balance': current('water.balance'),
+        'equipment_status': current('equipment_status'), 'equipment_timestamp_utc': last_timestamp('equipment'),
+        'logistics': current('logistics'), 'logistics_timestamp_utc': last_timestamp('logistics'),
+        'logistics_quality': {k: Q_NAMES.get(v,'missing') for k,v in current('logistics_q').items()},
+        'water_balance': current('water.balance'),
         'water_note': 'Residual includes common-area use and losses. Missing room meters invalidate a complete comparison; it is not proof of a leak.',
         'safety_constraints': obs.building.raw.get('constraints', {}),
     }

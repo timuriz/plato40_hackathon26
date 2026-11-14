@@ -14,6 +14,7 @@ import pandas as pd
 from plato.observe import observe
 from plato.ui_payload import build_dashboard_payload, build_room_history
 from plato.ui_intelligence import next_incident_time
+from plato.ui_activity import build_activity
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -47,6 +48,18 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as exc:
                 # pandas also raises timezone-specific ambiguity/nonexistent-time errors.
                 return self._json({"error": str(exc)}, status=400)
+        if parsed.path == "/api/activity":
+            params = parse_qs(parsed.query)
+            get = lambda key, default='': params.get(key, [default])[0]
+            try:
+                result = build_activity(self.observation, get('at') or self.observation.grid[0],
+                    decisions_path=self.decisions, incidents_path=self.incidents, actions_path=self.actions,
+                    category=get('type', 'all'), asset=get('asset'), severity=get('severity'),
+                    issue_type=get('issue_type'), status=get('status'), from_date=get('from_date'),
+                    to_date=get('to_date'), cursor=get('cursor') or None, limit=get('limit', '50'))
+                return self._json(result)
+            except (ValueError, KeyError, TypeError) as exc:
+                return self._json({'error': str(exc)}, status=400)
         if parsed.path == "/api/health":
             payload = {"status": "ok", "pipeline": "observe", "profile": self.observation.manifest.get("profile"),
                        "start_utc": self.observation.grid[0].isoformat() if len(self.observation.grid) else None,
