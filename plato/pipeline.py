@@ -31,6 +31,8 @@ class PipelineResult:
     n_episodes: int
     summary: Dict[str, Any] = field(default_factory=dict)
     out_path: Optional[str] = None
+    incidents: List[Dict[str, Any]] = field(default_factory=list)
+    incidents_path: Optional[str] = None
 
 
 def _understand_one(emission: Emission, llm: Optional[AdaptionClient], use_llm: bool) -> Tuple[Dict[str, Any], str]:
@@ -43,9 +45,38 @@ def _understand_one(emission: Emission, llm: Optional[AdaptionClient], use_llm: 
     return rule_based_incident(packet), "fallback"
 
 
+def _incident_record(emission: Emission, incident: Dict[str, Any], source: str) -> Dict[str, Any]:
+    """One detection/UNDERSTAND record for the incident log the UI reads (`--incidents`). It shares
+    ``episode_id`` with the decisions so the dashboard links incident -> decision causally."""
+    cand = emission.candidate
+    packet = cand.packet()
+    ts = packet.get("time") or (packet.get("window") or "").split("..")[-1]
+    features = packet.get("features", {}) or {}
+    evidence = [f"{k}={features[k]}" for k in incident.get("evidence_used", []) if k in features]
+    assets = [cand.asset] + [a for a in cand.affected_assets if a != cand.asset]
+    return {
+        "episode_id": emission.episode_id,
+        "timestamp_utc": ts,
+        "issue_type": incident["issue_type"],
+        "likely_cause": incident.get("likely_cause"),
+        "severity": incident.get("severity"),
+        "confidence": round(float(incident.get("confidence", 0.0)), 2),
+        "title": f"{cand.asset}: {str(incident['issue_type']).replace('_', ' ')}",
+        "reason": incident.get("reason"),
+        "affected_assets": assets,
+        "detector": cand.detector,
+        "status": "escalated" if emission.is_followup else "detected",
+        "evidence": evidence,
+        "features": features,
+        "quality_flags": list(cand.quality_flags),
+        "source": source,
+    }
+
+
 def run_pipeline(data_dir, out_path: Optional[str] = None, use_llm: bool = True,
                  model: Optional[str] = None, cache_dir: Optional[str] = None,
-                 llm_workers: int = 12, env_path: str = ".env") -> PipelineResult:
+                 llm_workers: int = 12, env_path: str = ".env",
+                 incidents_path: Optional[str] = None) -> PipelineResult:
     t0 = time.perf_counter()
     obs = observe(data_dir)
     candidates = detect_all(obs)
@@ -69,10 +100,13 @@ def run_pipeline(data_dir, out_path: Optional[str] = None, use_llm: bool = True,
                 results[i] = res
 
     decisions: List[Dict[str, Any]] = []
+    incidents: List[Dict[str, Any]] = []
     episode_opener: Dict[str, str] = {}  # episode_id -> first decision event_id (for follow-up dependencies)
     source_counts: Dict[str, int] = {}
     for emission, (incident, source) in zip(episodes, results):
         source_counts[source] = source_counts.get(source, 0) + 1
+        if incident.get("issue_type") != "no_incident":
+            incidents.append(_incident_record(emission, incident, source))
         packet = emission.candidate.packet()
         recs = decide(incident, packet, episode_id=emission.episode_id,
                       guest_request_ids=emission.candidate.guest_request_ids or None)
@@ -85,18 +119,27 @@ def run_pipeline(data_dir, out_path: Optional[str] = None, use_llm: bool = True,
             decisions.append(rec)
 
     decisions = _finalise(decisions)
-    summary = _summarise(obs, candidates, episodes, decisions, source_counts, time.perf_counter() - t0, use_llm)
+    incidents.sort(key=lambda r: (r["timestamp_utc"], r["episode_id"]))
+    summary = _summarise(obs, candidates, episodes, decisions, incidents, source_counts,
+                         time.perf_counter() - t0, use_llm)
 
     if out_path:
-        p = Path(out_path)
-        if p.parent != Path("."):
-            p.parent.mkdir(parents=True, exist_ok=True)
-        with p.open("w", encoding="utf-8") as fh:
-            for rec in decisions:
-                fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        _write_jsonl(out_path, decisions)
+    if incidents_path:
+        _write_jsonl(incidents_path, incidents)
 
     return PipelineResult(decisions=decisions, n_candidates=len(candidates), n_episodes=len(episodes),
-                          summary=summary, out_path=out_path)
+                          summary=summary, out_path=out_path, incidents=incidents,
+                          incidents_path=incidents_path)
+
+
+def _write_jsonl(path: str, rows: List[Dict[str, Any]]) -> None:
+    p = Path(path)
+    if p.parent != Path("."):
+        p.parent.mkdir(parents=True, exist_ok=True)
+    with p.open("w", encoding="utf-8") as fh:
+        for rec in rows:
+            fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
 def _finalise(decisions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -113,7 +156,7 @@ def _finalise(decisions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return decisions
 
 
-def _summarise(obs, candidates, episodes, decisions, source_counts, elapsed, use_llm) -> Dict[str, Any]:
+def _summarise(obs, candidates, episodes, decisions, incidents, source_counts, elapsed, use_llm) -> Dict[str, Any]:
     def counts(key):
         d: Dict[str, int] = {}
         for rec in decisions:
@@ -124,6 +167,7 @@ def _summarise(obs, candidates, episodes, decisions, source_counts, elapsed, use
         "steps_15min": len(obs.grid),
         "candidates": len(candidates),
         "episodes": len(episodes),
+        "incidents": len(incidents),
         "decisions": len(decisions),
         "by_issue_type": counts("issue_type"),
         "by_action": counts("action"),
@@ -139,7 +183,8 @@ def _summarise(obs, candidates, episodes, decisions, source_counts, elapsed, use
 def format_summary(s: Dict[str, Any]) -> str:
     lines = ["=" * 78,
              f"PIPELINE  profile={s['dataset_profile']}  steps={s['steps_15min']}  "
-             f"candidates={s['candidates']}  episodes={s['episodes']}  decisions={s['decisions']}",
+             f"candidates={s['candidates']}  episodes={s['episodes']}  "
+             f"incidents={s['incidents']}  decisions={s['decisions']}",
              "=" * 78,
              f"LLM used: {s['llm_used']}   understand source: {s['understand_source']}",
              f"approvals required: {s['approvals_required']}   guest consent required: {s['consent_required']}",

@@ -1,52 +1,74 @@
 # PLATO-40 Command Center UI
 
-Eigenständige React-Oberfläche mit Vite. Die UI ersetzt nicht `dashboard/`, führt keine physischen Aktionen aus und liest Replay-Daten aus der vorhandenen kausalen `observe.asof(t)` Pipeline.
+A standalone React + Vite dashboard. It does not execute any physical action; it replays what the
+building knew, what the pipeline detected, and what it decided, using the causal `observe.asof(t)` view
+plus the pipeline's `decisions.jsonl` and `incidents.jsonl` outputs.
 
-## Build und Start
+## How it connects to the backend
 
-```bash
-cd /Users/admin/Documents/plato40_hackathon26
-npm run install:ui   # einmalig
-npm run build
-python serve_ui.py --data data
+```
+run.py ──► out/decisions.jsonl          ┐
+       └─► out/incidents.jsonl          │   (episode_id links an incident to its decisions)
+                                         ▼
+serve_ui.py --data data --decisions ... --incidents ...
+   ├─ serves the built React app from ui/dist
+   └─ exposes the replay API under /api/*
+                                         ▲
+ui (Vite) ── fetch('/api/...') ──────────┘   (dev server proxies /api to port 8090)
 ```
 
-Dann `http://127.0.0.1:8090` öffnen. Vite erzeugt `ui/dist`; der Python-Server liefert diesen Build aus und stellt die Replay-API bereit.
+## Run it (production build)
 
-Für die lokale UI-Entwicklung zwei Terminals verwenden:
+From the repository root:
 
 ```bash
-# Terminal 1 – API und Dataset
-python serve_ui.py --data data
+# 1. Generate the decisions + incidents the UI reads (rule-based, offline; add an API key for the LLM)
+python run.py --data data --no-llm --out out/decisions.jsonl
 
-# Terminal 2 – Vite mit Hot Reload
+# 2. Build the React app once (creates ui/dist)
+npm run install:ui
+npm run build
+
+# 3. Serve the built UI and the replay API together on one port
+python serve_ui.py --data data --decisions out/decisions.jsonl --incidents out/incidents.jsonl
+```
+
+Then open `http://127.0.0.1:8090`.
+
+`run.py` writes `incidents.jsonl` next to `--out` automatically (override with `--incidents PATH`).
+Drop `--no-llm` to use the Adaption LLM (needs `ADAPTION_API_KEY` in `.env`); add `--cache-dir .cache/llm`
+for fast, identical reruns.
+
+## Develop the UI with hot reload
+
+Two terminals:
+
+```bash
+# Terminal 1 – replay API + dataset
+python serve_ui.py --data data --decisions out/decisions.jsonl --incidents out/incidents.jsonl
+
+# Terminal 2 – Vite dev server with hot reload (proxies /api to port 8090)
 npm run dev
 ```
 
-Die Vite-Entwicklungsoberfläche läuft auf `http://127.0.0.1:5173` und proxyt `/api` an den Python-Server auf Port 8090.
+The Vite dev UI runs on `http://127.0.0.1:5173`.
 
-Pipeline-Ausgaben können so angeschlossen werden:
+## Data contract
 
-```bash
-python serve_ui.py --data data --incidents outputs/incidents.jsonl --decisions outputs/decisions.jsonl
-```
+- `GET /api/health`: pipeline profile, replay bounds, step count.
+- `GET /api/dashboard?at=<ISO-8601 UTC>`: full state at the last real step ≤ `at` (server uses `obs.asof(t)`).
+- `GET /api/room-history?at=<ISO-8601 UTC>&room_id=R101`: causal hourly temperature / setpoint / humidity / CO₂.
+- `GET /api/replay/incident?at=...&direction=next|previous`: jump to the next/previous detected incident.
+- `GET /api/replay/resolve-time?local=<YYYY-MM-DDTHH:MM>`: resolve a Europe/Vienna wall-clock time to UTC.
 
-## Datenvertrag
+`--decisions` follows `DECISION_CONTRACT.md` (`event_id`, `timestamp_utc`, `affected_assets`, `issue_type`,
+`action`, `priority`, `reason`, `requires_human_approval`, plus optional `autonomy`, `episode_id`, `evidence`,
+`expected_outcome`, `verification_plan`, `confidence`). `--incidents` is the UNDERSTAND output
+(`episode_id`, `timestamp_utc`, `issue_type`, `severity`, `confidence`, `reason`, `affected_assets`,
+`evidence`, `features`). Both logs are shown only up to the selected replay time; an incident and a decision
+are linked only when they share `episode_id`. A missing log path renders as "not connected".
 
-- `GET /api/health`: Pipelineprofil, Replay-Grenzen und Anzahl Zeitpunkte.
-- `GET /api/dashboard?at=<ISO-8601 UTC>`: Zustand am letzten realen Dataset-Zeitpunkt bis einschließlich `at`. Serverseitig wird `obs.asof(t)` verwendet.
-- `GET /api/room-history?at=<ISO-8601 UTC>&room_id=R101`: kausale Stundenwerte für Temperatur, Sollwert, Feuchte und CO₂ des ausgewählten Zimmers.
-- `--incidents`: optionales JSONL der Detektion. Eine Zeile pro Episode/Datensatz, Zeitfeld `timestamp_utc`; sinnvolle Felder sind `episode_id`, `event_id`, `issue_type`, `priority`, `status`, `affected_assets`, `title`.
-- `--decisions`: optionales JSONL des Entscheidungsmodells. Die Felder aus `DECISION_CONTRACT.md` werden direkt angezeigt: `event_id`, `timestamp_utc`, `affected_assets`, `issue_type`, `action`, `priority`, `reason`, `requires_human_approval` und optionale Erklärungs-/Verifikationsfelder.
-
-Die beiden Logs werden nur bis zum ausgewählten Replay-Zeitpunkt angezeigt. Ein nicht übergebener oder nicht existierender Logpfad wird als nicht verfügbar dargestellt. Ein vorhandener, aber leerer Log wird als verbundene Quelle ohne Einträge dargestellt.
-
-Die 3D-Ansicht erzeugt ihre einzelnen Zimmer aus `building.json` (Etage, Orientierung und Fläche). Das ist ausdrücklich eine schematische Geometrie, kein vermessener Bauplan. Belegung, Housekeeping und Sensorwerte kommen zum gewählten Replay-Zeitpunkt aus der bestehenden Pipeline; Incidents werden nur für reale JSONL-Einträge markiert. Bei nicht verfügbarem WebGL zeigt die Oberfläche einen interaktiven 2D-Grundriss als Fallback.
-
-Im 3D-Modell: links ziehen zum Drehen, Mausrad oder Zoom-Tasten zum Vergrößern/Verkleinern, rechts ziehen zum Verschieben. „Reset camera“ stellt die Gebäudeübersicht wieder her; beim Zimmerklick fährt die Kamera weich zum Zimmer und gibt danach die freie Steuerung zurück.
-
-## Pipeline-Integration
-
-Der aktuelle `run.py` führt nur die Beobachtungs- und Qualitätsstufe aus. Er erzeugt momentan keine LLM-Entscheidungen und keine Incident-Episoden. Das LLM bzw. ein nachgelagerter Pipeline-Schritt kann die strukturierten JSONL-Ausgaben schreiben; anschließend werden deren Pfade mit `--decisions` und `--incidents` übergeben. React bleibt dabei vom konkreten Modell entkoppelt und rendert den vereinbarten Datenvertrag.
-
-Werte, die im ausgewählten Zeitpunkt unbekannt oder nicht angeschlossen sind, bleiben als unbekannt bzw. `—` sichtbar. Die UI erfindet keine Vorfälle, Empfehlungen, Entscheidungen, Erfolgsquoten oder Jahres-Insights. Eine Approval-Schaltfläche oder Aktor-Ausführung ist nicht angeschlossen.
+Values unknown at the selected instant stay unknown (`—`). The UI invents no incidents, decisions, success
+rates or yearly insights, and there is no approval or actuator endpoint connected. The 3D view derives
+schematic room geometry from `building.json`; it is not a surveyed floor plan, and falls back to an
+interactive 2D plan when WebGL is unavailable.

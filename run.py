@@ -26,6 +26,8 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="PLATO-40 pipeline")
     ap.add_argument("--data", required=True, help="dataset directory (quickstart, dev or holdout)")
     ap.add_argument("--out", default="decisions.jsonl", help="decision log output path")
+    ap.add_argument("--incidents", help="incident/UNDERSTAND log output path for the UI "
+                    "(default: incidents.jsonl next to --out)")
     ap.add_argument("--no-llm", action="store_true", help="skip the LLM; rule-based understand only")
     ap.add_argument("--model", help="Adaption model id (default: client default)")
     ap.add_argument("--cache-dir", help="cache LLM answers here (identical reruns, faster)")
@@ -45,14 +47,17 @@ def main(argv=None) -> int:
                 print(f"\nreport written to {args.report_json}")
             return 0
 
+        incidents_path = args.incidents or str(Path(args.out).with_name("incidents.jsonl"))
         result = run_pipeline(args.data, out_path=args.out, use_llm=not args.no_llm, model=args.model,
-                              cache_dir=args.cache_dir, llm_workers=args.llm_workers)
+                              cache_dir=args.cache_dir, llm_workers=args.llm_workers,
+                              incidents_path=incidents_path)
     except FileNotFoundError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
     print(format_summary(result.summary))
     print(f"\n{len(result.decisions)} decisions written to {result.out_path}")
+    print(f"{len(result.incidents)} incidents written to {result.incidents_path}")
     if args.report_json:
         obs = observe(args.data)
         _write(args.report_json, to_json(build_report(obs)))
