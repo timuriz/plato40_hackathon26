@@ -12,3 +12,8 @@ out/
 
 # cached LLM answers (keyed by packet hash; safe to delete)
 .cache/
+
+# UI build artifacts
+ui/node_modules/
+ui/dist/
+ui/.vite/
