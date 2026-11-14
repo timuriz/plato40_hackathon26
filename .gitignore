@@ -7,5 +7,8 @@ venv/
 .idea/
 .vscode/
 
-# generated output
+# generated output (decisions.jsonl / decisions_holdout.jsonl are deliverables -> NOT ignored)
 out/
+
+# cached LLM answers (keyed by packet hash; safe to delete)
+.cache/

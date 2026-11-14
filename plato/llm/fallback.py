@@ -45,27 +45,62 @@ def rule_based_incident(packet: Dict[str, Any]) -> Dict[str, Any]:
                     ["flow_z", "occupied_share"])
 
     if det == "comfort":
+        # defrost is a normal heat-pump state; only lockouts / unknown codes count as a fault
+        hp_bad = bool(f.get("hp_alarm")) or any(
+            k not in ("running", "standby", "defrost") for k in (f.get("hp_status_counts_24h") or {}))
+        if f.get("rooms_cold_now", 0) and f["rooms_cold_now"] >= 3:
+            return _out("heating_comfort", "equipment_fault", "high", 0.7,
+                        f"{asset}: {f['rooms_cold_now']} occupied rooms are below the comfort floor at once, "
+                        "which points to a heating-plant problem.",
+                        ["rooms_cold_now", "hp_status_counts_24h", "outdoor_c"])
         cold = f.get("temp_c") is not None and f.get("temp_c") < 20
-        if cold and f.get("guest_cold_requests", 0) > 0:
-            cause = "equipment_fault" if f.get("hp_alarm") else "weather_load"
-            return _out("heating_comfort", cause, "high", 0.7,
-                        f"{asset}: below 20 C with a guest cold request.",
-                        ["temp_c", "guest_cold_requests", "hp_alarm"])
+        if cold:
+            cause = "equipment_fault" if hp_bad else "weather_load"
+            sev = "high" if f.get("guest_cold_requests", 0) > 0 else "medium"
+            return _out("heating_comfort", cause, sev,
+                        0.7 if f.get("guest_cold_requests", 0) > 0 else 0.55,
+                        f"{asset}: occupied room below the comfort floor"
+                        + (" with a guest cold request" if f.get("guest_cold_requests", 0) > 0 else "") + ".",
+                        ["temp_c", "guest_cold_requests", "hp_status_counts_24h"])
         return _out("no_incident", "unknown", "low", 0.5,
                     f"{asset}: comfort is inside the allowed band.", ["temp_c"])
 
     if det == "sensor_quality":
+        if "reset" in flags or f.get("meter_reset_in_window"):
+            wo = f.get("confirmed_by_work_order")
+            return _out("data_quality", "meter_artefact", "low", 0.8,
+                        f"{asset}: cumulative meter was exchanged (counter restart)"
+                        + (f", confirmed by {wo}" if wo else "") + "; not a real water event.",
+                        ["quality_flags", "meter_reset_in_window", "confirmed_by_work_order"])
         return _out("data_quality", "sensor_fault", "low", 0.7,
                     f"{asset}: sensor looks faulty ({', '.join(sorted(flags)) or 'quality flags'}).",
                     ["quality_flags"])
 
     if det == "room_turnaround":
-        if f.get("housekeeping_state") != "clean":
-            return _out("room_turnaround", "staffing", "medium", 0.7,
-                        f"{asset}: room is not clean, so it is not ready for the next guest.",
-                        ["housekeeping_state"])
-        return _out("room_turnaround", "unknown", "low", 0.6,
-                    f"{asset}: room is clean and ready for the next step.", ["housekeeping_state"])
+        state = f.get("housekeeping_state")
+        waiting = bool(f.get("guest_waiting"))
+        slack = f.get("slack_minutes")
+        sick = f.get("cleaners_sick_known") or []
+        ready = f.get("projected_ready_utc")
+        if state == "clean" and not waiting:
+            return _out("room_turnaround", "unknown", "low", 0.6,
+                        f"{asset}: room is clean and ready for the next guest.", ["housekeeping_state"])
+        cause = "staffing"
+        late = slack is not None and slack < 0
+        if waiting or late:
+            sev, conf = "high", 0.8
+        elif slack is not None and slack < 60:
+            sev, conf = "medium", 0.75
+        else:
+            sev, conf = "low", 0.7
+        reason = (f"{asset}: room is {state or 'not clean'} and the next guest "
+                  + ("is already waiting" if waiting else "arrives soon")
+                  + (f"; projected ready {ready}" if ready else "")
+                  + (f", {abs(slack):.0f} min late" if late else "")
+                  + (f"; {len(sick)} cleaner(s) called in sick" if sick else "") + ".")
+        return _out("room_turnaround", cause, sev, conf, reason,
+                    ["housekeeping_state", "guest_waiting", "slack_minutes", "projected_ready_utc",
+                     "cleaners_sick_known"])
 
     return _out("data_quality", "unknown", "low", 0.2,
                 f"{asset}: no rule for detector '{det}', flagged for review.", [])
