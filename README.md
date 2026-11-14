@@ -301,3 +301,9 @@ fallback. Never commit credentials or API keys.
 Released under the [MIT License](LICENSE). The PLATO-40 synthetic datasets are provided by the organisers
 under CC BY 4.0 ("PLATO-40 synthetic dataset, Proximata Hackathon '26 – Rhomberg track"). *PLATO* and *CLARA*
 are Rhomberg product names, used here only to refer to this challenge context.
+
+
+## Team:
+Timur Izmailov
+Alexander Weinmüller
+Sebastian Torlakovic
