@@ -1,0 +1,39 @@
+> npm --prefix ui install
+
+
+up to date, audited 99 packages in 574ms
+
+9 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+
+> build
+> npm --prefix ui run build
+
+
+> plato40-command-center@1.0.0 build
+> vite build
+
+vite v6.4.6 building for production...
+✓ 2171 modules transformed.
+dist/index.html                         0.73 kB │ gzip:
+dist/index.html                         0.73 kB │ gzip:   0.39 kB
+dist/assets/index-DhA8Q6-i.css         42.71 kB │ gzip:
+dist/assets/index-DhA8Q6-i.css         42.71 kB │ gzip:   9.94 kB
+dist/assets/BuildingTwin-B9VP6c-q.js   35.96 kB │ gzip:  1
+dist/assets/BuildingTwin-B9VP6c-q.js   35.96 kB │ gzip:  11.16 kB
+dist/assets/index-CQ3u1P0H.js          58.96 kB │ gzip:  1
+dist/assets/index-CQ3u1P0H.js          58.96 kB │ gzip:  16.91 kB
+dist/assets/r3f-vendor-6ZkWbcV6.js    445.64 kB │ gz3fdist/assets/r3f-vendor-6ZkWbcV6.js    445.64 kB │ gz3fdist/assets/r3f-vendor-6ZkWbcV6.j752.68 kB │ gzip: 19
+dist/assets/ree-core-DNGpWLi9.js    752.68 kB │ gzip: 192.93 kB
+
+(!) Some chunks are larger than 500 kB after minification.
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve c
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#outpu
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunk
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 3.00s
