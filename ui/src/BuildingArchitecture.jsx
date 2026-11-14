@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Billboard, Html, Line, Text } from '@react-three/drei';
 import { Bot, UserRound } from 'lucide-react';
@@ -14,6 +14,10 @@ const FACADE_TOP = STORY_HEIGHT - .085;
 const FACADE_HEIGHT = FACADE_TOP - FACADE_BOTTOM;
 const FACADE_CENTER = (FACADE_BOTTOM + FACADE_TOP) / 2;
 
+function Glyph(props) {
+  return <Suspense fallback={null}><Text {...props} /></Suspense>;
+}
+
 function Solid({ at, size, color=MAT.steel, opacity=1, roughness=.75, metalness=.08, emissive, intensity=0, shadow=false }) {
   return <mesh position={at} castShadow={shadow} receiveShadow>
     <boxGeometry args={size}/><meshStandardMaterial color={color} roughness={roughness} metalness={metalness}
@@ -24,7 +28,7 @@ function Solid({ at, size, color=MAT.steel, opacity=1, roughness=.75, metalness=
 function ExitSign({ x=0, z=0.76 }) {
   return <group position={[x,1.28,z]}>
     <Solid at={[0,0,0]} size={[.6,.22,.04]} color="#266e55" emissive="#70cda3" intensity={.18}/>
-    <Text position={[0,0,.026]} fontSize={.12} color="#effff6">EXIT</Text>
+    <Glyph position={[0,0,.026]} fontSize={.12} color="#effff6">EXIT</Glyph>
   </group>;
 }
 
@@ -46,13 +50,13 @@ function StairCore({ x, showExits, mode, floor, isTopFloor, isGroundFloor, hasLo
       <Solid at={[0,1.02,1.09]} size={[.92,.96,.035]} color={MAT.glass} opacity={.38} roughness={.23}/>
       <Solid at={[0,1.02,1.13]} size={[.035,.98,.04]} color={MAT.steel}/>
     </>:<>
-      {isTopFloor?<><Solid at={[0,.145,.2]} size={[.86,.12,1.2]} color={MAT.wall}/><Text position={[0,.25,.2]} fontSize={.12} color="#435465">LANDING</Text></>:<>
+      {isTopFloor?<><Solid at={[0,.145,.2]} size={[.86,.12,1.2]} color={MAT.wall}/><Glyph position={[0,.25,.2]} fontSize={.12} color="#435465">LANDING</Glyph></>:<>
         {Array.from({length:9},(_,i)=><Solid key={i} at={[mainCore ? .22 : 0,.22+i*.2,.77-i*.18]} size={[mainCore ? .58 : .86,.1,.24]} color={MAT.wall}/>)}
         <Solid at={[mainCore ? .22 : 0,1.91,-.8]} size={[mainCore ? .58 : .86,.12,.8]} color={MAT.wall}/>
         <Line points={[[mainCore ? -.1 : -.47,.7,.84],[mainCore ? -.1 : -.47,1.91,-.68]]} color="#dbe5ea" lineWidth={1.2}/>
       </>}
     </>}
-    <Text position={[0,.34,1.13]} fontSize={.2} color={exterior?'#3c4a53':'#e7edf0'}>{String(floor).padStart(2,'0')}</Text>
+    <Glyph position={[0,.34,1.13]} fontSize={.2} color={exterior?'#3c4a53':'#e7edf0'}>{String(floor).padStart(2,'0')}</Glyph>
     {showExits&&!exterior&&!mainCore&&<ExitSign/>}
   </group>;
 }
@@ -83,13 +87,13 @@ function LobbyWing({ half, mode, buildingName, showRoof }) {
       <Solid at={[x,.91,front+.065]} size={[.035,1.63,.04]} color={MAT.steel}/>
       {[-1,1].map(side=><Solid key={`handle-${side}`} at={[x+side*.1,.95,front+.09]} size={[.025,.16,.035]} color={MAT.steel} metalness={.5}/>)}
       {showRoof&&<Solid at={[x,STORY_HEIGHT-.08,lobbyCenterZ]} size={[LOBBY_WIDTH+.2,.18,LOBBY_DEPTH+.17]} color={MAT.roof} shadow/>}
-      <Text position={[x,1.84,front+.08]} fontSize={.13} color="#3f505d">{buildingName||'LOBBY'}</Text>
+      <Glyph position={[x,1.84,front+.08]} fontSize={.13} color="#3f505d">{buildingName||'LOBBY'}</Glyph>
     </>:<>
       <Solid at={[x+LOBBY_WIDTH/2,.43,lobbyCenterZ]} size={[.09,.67,LOBBY_DEPTH]} color={MAT.wall}/>
       <Solid at={[half+.09,.43,(1.2+front)/2]} size={[.09,.67,front-1.2]} color={MAT.wall}/>
       <Solid at={[x+.6,.43,rear]} size={[LOBBY_WIDTH-1.2,.67,.09]} color={MAT.wall}/>
       {[-1,1].map(side=><Solid key={`entry-jamb-${side}`} at={[x+side*doorWidth/2,.43,front]} size={[.09,.67,.1]} color={MAT.steel}/>)}
-      <Billboard position={[x,.93,lobbyCenterZ]}><Text fontSize={.22} color="#f8fafb" outlineWidth={.01} outlineColor="#14202a">LOBBY</Text></Billboard>
+      <Billboard position={[x,.93,lobbyCenterZ]}><Glyph fontSize={.22} color="#f8fafb" outlineWidth={.01} outlineColor="#14202a">LOBBY</Glyph></Billboard>
     </>}
     <Solid at={[x,.1,front+.13]} size={[1.32,.03,.33]} color={MAT.timber}/>
   </group>;
@@ -109,7 +113,7 @@ function FacadeBay({ entry, color, selected, incidentColor }) {
     <Solid at={[-slotWidth/2+.04,FACADE_CENTER,sign*.085]} size={[.04,FACADE_HEIGHT,.045]} color={MAT.timber}/>
     <Solid at={[pier/2,.55,sign*.065]} size={[Math.max(.35,window-.15),.035,.045]} color={incidentColor||color} emissive={incidentColor||color} intensity={selected?.6:.26}/>
     {incidentColor&&<mesh position={[slotWidth/2-.15,1.56,sign*.15]}><sphereGeometry args={[.105,16,16]}/><meshBasicMaterial color={incidentColor}/></mesh>}
-    <group position={[pier/2,.3,sign*.075]} rotation={[0,sign<0?Math.PI:0,0]}><Text fontSize={.14} color="#f1f4f5">{entry.room.id}</Text></group>
+    <group position={[pier/2,.3,sign*.075]} rotation={[0,sign<0?Math.PI:0,0]}><Glyph fontSize={.14} color="#f1f4f5">{entry.room.id}</Glyph></group>
   </group>;
 }
 
@@ -133,8 +137,8 @@ function Room({ entry, status, color, selected, incidentColor, detailed, onSelec
     <Solid at={[width*.29,.32,-sign*.55]} size={[width*.28,.48,depth*.25]} color="#bac8cc" opacity={.68}/>
     <Solid at={[width*.29,.59,-sign*.55]} size={[width*.28,.03,depth*.25]} color="#dee4e1"/>
     {detailed&&<Billboard position={[0,wallHeight+.44,0]}>
-      <Text fontSize={.24} color="#f6f8fa" outlineWidth={.012} outlineColor="#101a25">{room.id}</Text>
-      <Text position={[0,-.23,0]} fontSize={.12} color={color} outlineWidth={.008} outlineColor="#101a25">{status}</Text>
+      <Glyph fontSize={.24} color="#f6f8fa" outlineWidth={.012} outlineColor="#101a25">{room.id}</Glyph>
+      <Glyph position={[0,-.23,0]} fontSize={.12} color={color} outlineWidth={.008} outlineColor="#101a25">{status}</Glyph>
     </Billboard>}
     {detailed&&<group position={[0,.14,innerZ-sign*.16]}><mesh position={[-.11,0,0]} rotation={[-Math.PI/2,0,0]}><circleGeometry args={[.055,12]}/><meshBasicMaterial color={occupancy}/></mesh><mesh position={[.11,0,0]} rotation={[-Math.PI/2,0,0]}><circleGeometry args={[.055,12]}/><meshBasicMaterial color={readiness}/></mesh></group>}
     {selected&&<Line points={[[-width/2,.095,-depth/2],[width/2,.095,-depth/2],[width/2,.095,depth/2],[-width/2,.095,depth/2],[-width/2,.095,-depth/2]]} color="#8fd3ff" lineWidth={2.5}/>}
@@ -233,7 +237,7 @@ export function TechnicalAssets({ placements, selectedAsset, incidents, onSelect
     {mode!=='floor'&&tech.length>0&&<group position={[-half-1.85-(techColumns-1)*.35,bottom,0]}>
       <Solid at={[0,.03,0]} size={[techWidth,.16,5.8]} color="#3c4d58"/>
       <Solid at={[techWidth/2-.06,.4,0]} size={[.08,.8,5.8]} color={MAT.steel} opacity={.75}/>
-      <Text position={[0,.12,3.02]} rotation={[-Math.PI/2,0,0]} fontSize={.16} color="#b8cbd5">TECHNICAL · SCHEMATIC</Text>
+      <Glyph position={[0,.12,3.02]} rotation={[-Math.PI/2,0,0]} fontSize={.16} color="#b8cbd5">TECHNICAL · SCHEMATIC</Glyph>
     </group>}
     {placements.filter(p=>mode!=='floor'||(['floor','lobby'].includes(p.group)&&Number(p.floor)===Number(selectedFloor))).map(({asset,position,group})=>{
       const active=incidents.find(item=>(item.affected_assets||[]).includes(asset.id));

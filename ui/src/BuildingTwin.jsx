@@ -5,6 +5,7 @@ import { Box, RotateCcw, Layers3, Building2, ChevronDown, MousePointer2, Radio, 
 import * as THREE from 'three';
 import { ArchitecturalFloor, BuildingEnvelope, TechnicalAssets } from './BuildingArchitecture.jsx';
 import { buildRoomLayout as layoutRooms, buildAssetLayout, STORY_HEIGHT, ROOM_OUTER_Z, halfWidth } from './buildingLayout.js';
+import { ROOM_PIN_TYPES, visibleIncidents } from './incidentVisibility.js';
 
 const STATUS = {
   clean: { color: '#4ed8c7', label: 'Clean reported' },
@@ -16,7 +17,6 @@ const STATUS = {
   unknown: { color: '#6b7280', label: 'Unknown' },
 };
 const SEVERITY = { critical: '#ff5e7a', high: '#ff5e7a', medium: '#ff5e7a', low: '#ff5e7a' };
-const ACTIVE_STATUSES = new Set(['open','active','acknowledged','in_progress','investigating','new','detected','escalated']);
 const clamp = (value,min,max) => Math.min(max,Math.max(min,value));
 const fmt = (value,digits=1) => value==null||!Number.isFinite(Number(value))?'—':Number(value).toLocaleString('de-AT',{maximumFractionDigits:digits});
 const human = value => String(value??'unknown').replaceAll('_',' ').replace(/\b\w/g,match=>match.toUpperCase());
@@ -94,13 +94,17 @@ function BuildingModel({ rooms, floors, mode, selectedFloor, incidents, selected
   const visibleFloors=mode==='floor'?floors.filter(f=>Number(f)===Number(selectedFloor)):floors;
   const gap=mode==='exploded'?3.35:STORY_HEIGHT;
   const sceneFloorY=mode==='floor'?0:(floor,index)=> (index-(floors.length-1)/2)*gap;
+  const openIncidents=useMemo(()=>visibleIncidents(incidents, payload?.replay?.timestamp_utc, rooms),[incidents, rooms, payload?.replay?.timestamp_utc]);
   const incidentByAsset=useMemo(()=>{
     const map=new Map();
-    incidents.filter(incident=>ACTIVE_STATUSES.has(String(incident.status||'').toLowerCase())).forEach(incident=>(incident.affected_assets||[]).forEach(asset=>{
-      if(rooms.some(room=>room.id===asset)&&!map.has(asset)) map.set(asset,incident);
-    }));
+    openIncidents.forEach(incident=>{
+      if(!ROOM_PIN_TYPES.has(incident.issue_type)) return;
+      (incident.affected_assets||[]).forEach(asset=>{
+        if(rooms.some(room=>room.id===asset)&&!map.has(asset)) map.set(asset,incident);
+      });
+    });
     return map;
-  },[incidents,rooms]);
+  },[openIncidents,rooms]);
   const roomPosition=selectedRoom?(()=>{
     const entries=positioned.get(Number(selectedRoom.floor))||[];
     const entry=entries.find(x=>x.room.id===selectedRoom.id);
@@ -109,8 +113,8 @@ function BuildingModel({ rooms, floors, mode, selectedFloor, incidents, selected
     const y=mode==='floor'?0:(floorIndex-(floors.length-1)/2)*gap;
     return {id:selectedRoom.id,x:entry.x,y:y+0.5,z:entry.z};
   })():null;
-  const activeIncidents=incidents.filter(item=>ACTIVE_STATUSES.has(String(item.status||'').toLowerCase()));
-  const globalIncidents=activeIncidents.filter(item=>(item.affected_assets||[]).includes('BUILDING'));
+  const activeIncidents=openIncidents;
+  const globalIncidents=activeIncidents.filter((item,index,all)=> (item.affected_assets||[]).includes('BUILDING') && all.findIndex(other=>other.issue_type===item.issue_type)===index);
   const modelHeight=mode==='floor'?0:(floors.length-1)*gap/2;
   const tracking=showResources?(payload?.resource_tracking?.resources||[]).filter(r=>r.last_known_location):[];
   const half=Math.max(1.5,...[...positioned.values()].map(halfWidth));
