@@ -44,6 +44,8 @@ OUTCOME = {
     "defer_action": "No action now; keep monitoring.",
     "order_service": "Simulated: service order created; not confirmed by the provider.",
     "optimize_energy": "Simulated: schedule shift proposed; savings are an estimate, not a measurement.",
+    "notify_guest": "Proposed: a message with the realistic ready time is drafted for the guest; delivery is not confirmed.",
+    "dispatch_robot": "Simulated: a floor-cleaning robot is tasked; bathrooms and room release stay with staff.",
 }
 VERIFY = {
     "schedule_cleaning": "Release only after housekeeping_state=clean; escalate if not clean before the deadline.",
@@ -56,4 +58,6 @@ VERIFY = {
     "defer_action": "Re-check at the next evaluation step.",
     "order_service": "Check the logistics signal (e.g. fill level) stays below its limit until the service happens.",
     "optimize_energy": "Check comfort stays in band while the schedule is shifted.",
+    "notify_guest": "Confirm the guest is informed and the room is ready by the promised time; escalate if the promise slips.",
+    "dispatch_robot": "Confirm the robot completed the floor task; a human still certifies the bathroom and releases the room.",
 }

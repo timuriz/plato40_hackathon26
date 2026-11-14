@@ -1,11 +1,16 @@
 __pycache__/
 *.pyc
+.pytest_cache/
 .venv/
 venv/
 .env
 .DS_Store
 .idea/
 .vscode/
+*.log
+
+# local planning notes, not a submission deliverable
+docs/chat_summary.md
 
 # generated output (decisions.jsonl / decisions_holdout.jsonl are deliverables -> NOT ignored)
 out/
