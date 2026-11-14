@@ -104,30 +104,30 @@ rule-based fallback.
 
 ```mermaid
 flowchart LR
-    data[(Dataset dir)] --> OBS
+    data[(Dataset)] --> OBS
 
     subgraph OBS[OBSERVE]
       direction TB
-      load[Load + clean] --> ql[Quality labels]
-      ql --> asof["Causal as-of view (obs.asof t)"]
+      load[Load and clean] --> ql[Quality labels]
+      ql --> asof[Causal as-of view]
     end
 
     subgraph UND[UNDERSTAND]
       direction TB
-      det["Causal detectors<br/>S01-S05 + logistics + energy"] --> ep[Episode grouping]
+      det[Causal detectors] --> ep[Episode grouping]
       ep --> cls{LLM?}
-      cls -- key set --> llm[LLM report_incident]
-      cls -- no key / --no-llm --> rule[Rule-based fallback]
+      cls -->|API key| llm[LLM explains the incident]
+      cls -->|No key| rule[Rule-based fallback]
     end
 
-    subgraph DEC[DECIDE & ACT]
+    subgraph DEC[DECIDE AND ACT]
       direction TB
-      pb[Playbooks] --> guard[Deterministic safety guard]
+      pb[Playbooks] --> guard[Safety guard]
     end
 
     OBS --> UND --> DEC
-    DEC --> rec[("RECORD<br/>decisions.jsonl + incidents.jsonl")]
-    rec --> learn[["LEARN<br/>insights.md"]]
+    DEC --> rec[RECORD decisions and incidents]
+    rec --> learn[LEARN insights]
 ```
 
 ### OBSERVE — `plato/observe/`
