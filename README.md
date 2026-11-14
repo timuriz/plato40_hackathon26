@@ -188,6 +188,7 @@ stretches of normal operation. Detectors live in `plato/understand/detectors/` a
 | **S04 Maintenance Cascade** | `ventilation_maintenance` | `maintenance` | Tells an `AHU1.filter_dp_pa` data gap from true degradation (rising trend in valid data only); times a technician/contractor service to real availability from the roster. |
 | **S05 Unexpected Weekend** | `occupancy_surge` | `weekend` | Forecasts occupancy from bookings known so far vs staffed cleaning capacity (cleaners, floor-only robots, on-call housekeeper); never invents capacity and reports the unmet gap. |
 | **Cleaning & logistics** | `logistics` | `logistics` | Forecasts waste bin / `WASTE_MAIN` time-to-full and vending stock against pickup/restock schedules; orders extra service early given lead time. |
+| **Guest requests** | `guest_request` | `guest` | One decision per request at arrival, in the guest's language. Cleaning is scheduled, faults are inspected (consent if the room is occupied), everything else is a draft reply. A draft is not a sent message, and consent required is not consent granted. Early check-in, waiting and cold-room requests stay with S01 and S03. |
 | **Energy optimisation** | `energy_optimization` | `energy` | Shifts battery charge/discharge and pre-heating against day-ahead price, PV and forecast; capped to one proposal/day; savings are simulated estimates only. |
 | **Bad-data handling** | `data_quality` | `quality` | Surfaces sensor faults, gaps, frozen sensors and gateway outages as data-quality incidents rather than false alarms. |
 

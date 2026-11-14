@@ -110,7 +110,7 @@ export function DecisionCenter({payload,selectedId,onSelect,onAsset,onIncident,o
   </section>;
 }
 
-export function LearningCenter({payload}) {
+export function LearningCenter({payload, onInspectIssue, onOpenRecord}) {
   const insights=payload?.insights||[], end=payload?.replay?.timestamp_utc;
   const counts=(payload?.incidents||[]).reduce((map,item)=>{if(item.issue_type)map[item.issue_type]=(map[item.issue_type]||0)+1;return map},{});
   const recurring=Object.entries(counts).filter(([,count])=>count>=2).sort((a,b)=>b[1]-a[1]);

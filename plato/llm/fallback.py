@@ -178,6 +178,25 @@ def rule_based_incident(packet: Dict[str, Any]) -> Dict[str, Any]:
     if det == "logistics":
         return _logistics(asset, f)
 
+    if det == "guest_request":
+        sev = f.get("priority") if f.get("priority") in ("critical", "high", "medium", "low") else "medium"
+        kind = f.get("request_type") or "request"
+        msg = f.get("draft_message") or ""
+        if kind in ("water_issue", "maintenance_issue"):
+            cause = "equipment_fault"
+        elif kind == "cleaning_request":
+            cause = "cleaning_activity"
+        else:
+            cause = "guest_usage"
+        reason = (f"{asset}: guest request {f.get('request_id')} ({kind}, {f.get('language')}). "
+                  f"Draft reply, not sent: {msg}")
+        if f.get("overdue"):
+            reason = "The reply deadline has passed. " + reason
+        if f.get("consent_required") and f.get("occupied"):
+            reason += " Entering the occupied room needs guest consent; it is not granted."
+        return _out("guest_request", cause, sev, 0.85, reason,
+                    ["request_id", "request_type", "draft_message", "response_due_utc", "occupied"])
+
     return _out("data_quality", "unknown", "low", 0.2,
                 f"{asset}: no rule for detector '{det}', flagged for review.", [])
 

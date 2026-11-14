@@ -11,7 +11,7 @@ from typing import Any, Dict, List
 
 ISSUE_TYPES = [
     "room_turnaround", "water_leak", "heating_comfort", "ventilation_maintenance", "occupancy_surge",
-    "energy_optimization", "logistics", "data_quality",
+    "energy_optimization", "logistics", "guest_request", "data_quality",
     "no_incident",  # the candidate was a false alarm / normal operation
 ]
 LIKELY_CAUSES = [

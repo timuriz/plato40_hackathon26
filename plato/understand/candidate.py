@@ -23,6 +23,7 @@ MAINTENANCE = "ventilation_maintenance"   # S04: AHU1 filter loading seen in val
 MAINTENANCE_GAP = "ventilation_sensor_gap"  # S04: AHU1 filter_dp_pa blank run (data gap, not degradation)
 LOGISTICS = "logistics"                   # waste bins / WASTE_MAIN / VEND1 versus the regular service
 ENERGY = "energy_optimization"
+GUEST = "guest_request"
 OCCUPANCY_SURGE = "occupancy_surge"      # S05: forecast cleaning demand versus known staffed capacity
 
 # severities a detector may assign from the signal alone (an a-priori hint; the LLM may revise)

@@ -128,6 +128,19 @@ def propose(u: Dict[str, Any], packet: Dict[str, Any]) -> List[Proposal]:
                                             "residual_gap_rooms": int(f.get("residual_gap_after_oncall") or 0)}))
         return out
 
+    if it == "guest_request":
+        kind = f.get("request_type")
+        pri = sev if sev in ("critical", "high", "medium", "low") else "medium"
+        msg = f.get("draft_message") or ""
+        why = "draft reply for the guest; the message is proposed, not delivered"
+        if kind == "cleaning_request":
+            return [Proposal("schedule_cleaning", pri, "guest asked for cleaning; " + why, params={"draft_message": msg})]
+        if kind in ("water_issue", "maintenance_issue"):
+            return [Proposal("request_inspection", pri, "guest reported a fault; confirm before spending a technician",
+                             enters_room=occ, params={"draft_message": msg})]
+        # late checkout, towels, wifi, noise, parking, luggage, invoice, air, arrival: reply only
+        return [Proposal("notify_guest", pri, why, params={"draft_message": msg, "language": f.get("language")})]
+
     if it == "data_quality" and packet.get("detector") == "ventilation_sensor_gap":
         long_gap = float(f.get("gap_hours_so_far") or 0) >= 24
         return [Proposal("flag_anomaly", "medium" if long_gap else "low",

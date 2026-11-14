@@ -76,11 +76,11 @@ export default function App() {
   useEffect(()=>{
     const stamp=payload?.replay?.timestamp_utc;
     if(!selectedRoom||!stamp)return;
-    setPayload(previous=>previous?{...previous,room_history:[]}:previous);
+    setPayload(previous=>previous?{...previous,room_history:[],room_history_error:''}:previous);
     let current=true;
     api(`/api/room-history?at=${encodeURIComponent(stamp)}&room_id=${encodeURIComponent(selectedRoom)}`).then(result=>{
-      if(current)setPayload(previous=>previous?.replay?.timestamp_utc===stamp?{...previous,room_history:result.series}:previous);
-    }).catch(()=>{});
+      if(current)setPayload(previous=>previous?.replay?.timestamp_utc===stamp?{...previous,room_history:result.series,room_history_error:''}:previous);
+    }).catch(e=>{if(current)setPayload(previous=>previous?.replay?.timestamp_utc===stamp?{...previous,room_history:[],room_history_error:e.message}:previous)});
     return()=>{current=false};
   },[selectedRoom,payload?.replay?.timestamp_utc]);
   const loadIndex=useCallback((n)=>{if(!health)return;const clamped=Math.min(Math.max(0,n),health.step_count-1);const stamp=new Date(new Date(health.start_utc).getTime()+clamped*(health.step_minutes||15)*60_000).toISOString();loadAt(stamp)},[health,loadAt]);

@@ -30,6 +30,7 @@ GAP_TOLERANCE = {
     "logistics": pd.Timedelta("14h"),                # hourly projection re-emitted every 12 h
     "energy_optimization": pd.Timedelta("12h"),  # at most one proposal per local day -> one episode per day
     "occupancy_surge": pd.Timedelta("12h"),      # raised once per affected day (<=1 revision), days are >12 h apart
+    "guest_request": pd.Timedelta("48h"),        # one request, plus a higher-priority nudge if the reply deadline passes
 }
 DEFAULT_GAP = pd.Timedelta("1h")
 MAX_FOLLOWUPS = 2
@@ -51,7 +52,9 @@ def _episode_id(detector: str, asset: str, start: pd.Timestamp) -> str:
 def build_episodes(candidates: List[Candidate]) -> List[Emission]:
     by_key: Dict[Tuple[str, str], List[Candidate]] = {}
     for c in candidates:
-        by_key.setdefault((c.detector, c.asset), []).append(c)
+        # A guest request keeps the room as its asset, but each request_id is its own episode.
+        group = str((c.features or {}).get("episode_asset") or c.asset)
+        by_key.setdefault((c.detector, group), []).append(c)
 
     emissions: List[Emission] = []
     for (detector, asset), cs in by_key.items():
