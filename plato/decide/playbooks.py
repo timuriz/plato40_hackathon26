@@ -60,8 +60,13 @@ def propose(u: Dict[str, Any], packet: Dict[str, Any]) -> List[Proposal]:
     if it == "room_turnaround":
         if f.get("housekeeping_state") == "clean":
             return [Proposal("release_room", "low", "room is clean")]
-        pri = "high" if f.get("queue_length", 0) >= 3 or sev in ("high", "critical") else sev
-        return [Proposal("schedule_cleaning", pri, "room is not clean and cannot be released")]
+        pri = "high" if f.get("guest_waiting") or sev in ("high", "critical") else (sev or "medium")
+        props = [Proposal("schedule_cleaning", pri, "room is not clean and cannot be released")]
+        if f.get("guest_waiting") or f.get("arrival_target_utc"):
+            props.append(Proposal("notify_guest", pri, "give the guest a realistic ready time",
+                                  params={"projected_ready_utc": f.get("projected_ready_utc"),
+                                          "arrival_target_utc": f.get("arrival_target_utc")}))
+        return props
 
     if it == "ventilation_maintenance":
         if conf < CONF_PROPOSE:

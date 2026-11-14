@@ -24,6 +24,9 @@ CHECKOUT_TYPES = ("checkout", "checkout_early")
 HK_READY = "clean"
 DEFAULT_CLEAN_MIN = 45     # fallback cleaning minutes before any history exists
 HOUSEKEEPING_END_LOCAL = "15:30"
+# A routine checkout whose next guest is more than this many minutes after the projected ready time is
+# normal operations, not an incident. Waiting guests and early-check-in requests always count as risk.
+SLACK_RISK_MIN = 180.0
 
 
 def _state_at(obs, room: str, t: pd.Timestamp) -> Optional[str]:
@@ -129,12 +132,17 @@ def detect_turnaround(obs) -> List[Candidate]:
 
         target = t if waiting else (arrival if arrival is not None else t)
         slack_min = (target - projected).total_seconds() / 60.0 if target is not None else None
+        # Sick cleaners shrink the on-shift count, which pushes projected_ready later and tightens slack.
+        at_risk = waiting or (len(early) > 0) or (slack_min is not None and slack_min < SLACK_RISK_MIN)
+        if not at_risk:
+            continue  # routine checkout with ample lead time is normal operation, not an incident
         sick = roster[(roster["role"] == "cleaner") & (roster["status"] == "sick")]["resource_id"].unique().tolist() \
             if len(roster) else []
         feats = {
             "trigger": r.type,
             "housekeeping_state": state,
             "guest_waiting": bool(waiting),
+            "early_request": bool(len(early)),
             "arrival_target_utc": _to_iso(target),
             "projected_ready_utc": _to_iso(projected),
             "slack_minutes": round(slack_min, 1) if slack_min is not None else None,

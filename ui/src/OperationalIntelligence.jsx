@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertTriangle, ArrowDownRight, ArrowRight, Bot, CheckCircle2, Clock3, Cpu, Database, Droplets, FileSearch, ShieldCheck, Sparkles, Thermometer, Users } from 'lucide-react';
+import { AlertTriangle, ArrowDownRight, ArrowRight, Bot, CalendarClock, CheckCircle2, Clock3, Cpu, Database, Droplets, FileSearch, Recycle, ShieldCheck, Sparkles, Thermometer, Users, Wrench } from 'lucide-react';
 
 export const recordId = row => row?.episode_id || row?.incident_id || row?.event_id || `${row?.issue_type}-${row?.timestamp_utc}`;
 export const human = value => String(value ?? 'Not supplied').replaceAll('_',' ').replace(/\b\w/g,m=>m.toUpperCase());
@@ -9,6 +9,9 @@ const scenarios = [
   {id:'S01',title:'The Perfect Checkout',types:['room_turnaround'],icon:Users},
   {id:'S02',title:'The Hidden Water Leak',types:['water_leak'],icon:Droplets},
   {id:'S03',title:'Energy vs Comfort',types:['heating_comfort','energy_optimization'],icon:Thermometer},
+  {id:'S04',title:'The Maintenance Cascade',types:['ventilation_maintenance'],icon:Wrench},
+  {id:'S05',title:'The Unexpected Weekend',types:['occupancy_surge'],icon:CalendarClock},
+  {id:'LOG',title:'Cleaning & Logistics',types:['logistics'],icon:Recycle},
 ];
 const scenarioFor = incident => scenarios.find(s=>s.id===incident?.scenario_id||s.types.includes(incident?.issue_type));
 const linked = (incident,decision) => Boolean(incident && ((incident.episode_id && incident.episode_id===decision.episode_id) || (decision.incident_id && decision.incident_id===(incident.incident_id||incident.event_id))));
@@ -47,6 +50,15 @@ function ScenarioEvidence({scenario,payload,incident,onAsset}) {
       <h4>Possible explanations to check — not conclusions</h4><p className="intel-note">Guest use, cleaning, common-area consumption, meter resets and incomplete readings can explain anomalies. A detector suspicion is not a confirmed leak.</p>
       <EvidenceTable rows={events.filter(e=>/cleaning/.test(e.type)).slice(-10)} columns={[["timestamp_utc","Time",dateLabel],["room_id","Room"],["type","Cleaning evidence",human]]}/>
       <EvidenceTable rows={(ctx.work_orders||[]).filter(o=>!scoped||assets.includes(o.asset_id)||o.asset_id==='BUILDING')} columns={[["created_utc","Known since",dateLabel],["asset_id","Asset"],["status","Status",human],["summary","Maintenance context"]]}/>
+    </>:scenario?.id==='S04'?<>
+      <p className="intel-note">A blank filter-pressure reading is a data gap, not proof the filter failed. Degradation is only claimed from valid measurements, or from airflow falling while fan power rises.</p>
+      <h4>Plant measurements</h4><EvidenceTable rows={Object.entries(ctx.equipment||{}).map(([signal,value])=>({signal,value,quality:ctx.equipment_quality?.[signal]}))} columns={[["signal","Signal"],["value","Reading",v=>num(v)],["quality","Quality",human]]}/>
+      <EvidenceTable rows={ctx.work_orders||[]} columns={[["created_utc","Known since",dateLabel],["asset_id","Asset"],["status","Status",human],["summary","Work order"]]}/>
+      <Field label="Service decisions" value={episodeDecisions.map(d=>`${d.event_id}: ${d.action} · ${d.priority} · approval ${d.requires_human_approval}`)} empty="No linked maintenance decision yet."/>
+    </>:scenario?.id==='S05'||scenario?.id==='LOG'?<>
+      <p className="intel-note">Capacity and stock are only what the roster and sensors show at this time. Missing staff or robots are not replaced with invented capacity. An order is a proposal until the provider confirms it.</p>
+      <Field label="Detector evidence" value={incident?.evidence||incident?.features}/>
+      <Field label="Decisions" value={episodeDecisions.map(d=>`${d.event_id}: ${human(d.action)} · ${d.priority} · ${d.expected_outcome||d.reason}`)} empty="No linked decision yet."/>
     </>:<>
       <div className="intel-stat-row"><Field label="Occupied comfort constraint" value={`${(payload?.building?.comfort_band_c||[]).join('–')} °C`}/><Field label="Weather · measured outdoor" value={`${num(ctx.weather?.outdoor_c)} °C · ${ctx.weather_quality?.outdoor_c||'missing'}`}/><Field label="Electrical building / HVAC load" value={`${num(payload?.metrics?.energy_demand_kw)} / ${num(payload?.metrics?.hvac_kw)} kW`}/></div>
       <p className="intel-note">Occupant safety and comfort take precedence over cost optimization. Forecasts and tariffs are restricted to publications known by the replay cursor.</p>

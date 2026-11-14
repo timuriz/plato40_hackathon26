@@ -247,10 +247,12 @@ Action vocabulary (`plato/decide/vocabulary.py`): `schedule_cleaning`, `dispatch
   can compare the pre- and post-holdout states.
 - **Unchanged holdout run.** The same command is pointed at the holdout dataset and its output is committed as
   `decisions_holdout.jsonl` — the pipeline is not modified for the holdout.
-- **Post-tag changes.** Any change made after the `pre-holdout` tag is justified here. *(Level 2 detectors
-  S04/S05, logistics and energy optimisation were finished after the tag per the project plan; they plug into
-  the existing OBSERVE → detect → episodes → UNDERSTAND → DECIDE pipeline without changing the one-command
-  interface or the holdout procedure.)*
+- **Post-tag changes.** The `pre-holdout` tag already includes the Level 1 and Level 2 detectors. After the
+  tag, and before seeing any holdout data: the dashboard gained S04, S05 and logistics scenario tabs; turnaround
+  decisions also draft a guest-ready time and skip checkouts that still have hours of slack (less alert spam);
+  `dispatch_robot` got the same simulated-outcome and verification text as the other actions; `insights.md` /
+  `insights.jsonl` record the Level 3 recommendations. None of this changes the one-command interface or how the
+  holdout run is produced.
 
 ---
 
