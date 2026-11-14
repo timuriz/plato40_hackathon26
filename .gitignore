@@ -15,6 +15,10 @@ docs/chat_summary.md
 # generated output (decisions.jsonl / decisions_holdout.jsonl are deliverables -> NOT ignored)
 out/
 
+# full-year dataset drops. The quickstart in data/ stays tracked; these do not.
+PLATO40_v2_dev/
+PLATO40_v2_holdout/
+
 # cached LLM answers (keyed by packet hash; safe to delete)
 .cache/
 
